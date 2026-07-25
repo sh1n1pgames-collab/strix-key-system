@@ -108,26 +108,28 @@
         const keyBox = document.getElementById('keyBox');
         const keyOutput = document.getElementById('keyOutput');
 
-        // Подмена адреса при попытке копирования
-        function applyFakeURL() {
+        // Считываем билет ДО того, как очистим/подменим URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const userTicket = urlParams.get('ticket');
+
+        // Мгновенная замена адреса в адресной строке при входе
+        function eraseAndTrollURL() {
             const trollUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?error=nice_try_no_key_for_you_idiot';
             window.history.replaceState({path: trollUrl}, '', trollUrl);
         }
 
+        // Вызываем подмену сразу при старте скрипта
+        eraseAndTrollURL();
+
+        // Защита от выделения / копирования
         document.addEventListener('copy', (event) => {
-            applyFakeURL();
-            event.clipboardData.setData('text/plain', 'https://strix-key-system.onrender.com/?error=nice_try_no_key_for_you_idiot');
+            eraseAndTrollURL();
+            event.clipboardData.setData('text/plain', window.location.protocol + "//" + window.location.host + '/?error=nice_try_no_key_for_you_idiot');
             event.preventDefault();
         });
 
-        window.addEventListener('blur', applyFakeURL);
-
-        // Инициализация
+        // Инициализация сессии на сервере
         async function initSession() {
-            // Читаем параметр ticket из текущего адреса
-            const urlParams = new URLSearchParams(window.location.search);
-            const userTicket = urlParams.get('ticket');
-
             try {
                 let response = await fetch('/api/get-token', {
                     method: 'POST',
