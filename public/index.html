@@ -96,7 +96,7 @@
             <input type="text" id="keyOutput" readonly>
         </div>
 
-        <div class="footer">Secure HWID & IP Key System</div>
+        <div class="footer">Secure Anti-Bypass System</div>
     </div>
 
     <script>
@@ -106,7 +106,17 @@
         const keyBox = document.getElementById('keyBox');
         const keyOutput = document.getElementById('keyOutput');
 
-        // При загрузке страницы получаем уникальный защитный токен с сервера
+        // Функция постоянного изменения ссылки в строке браузера
+        function randomizeURL() {
+            const randomString = Math.random().toString(36.substring(2, 12)) + Math.random().toString(36).substring(2, 8);
+            const newurl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?v=' + randomString;
+            window.history.pushState({path: newurl}, '', newurl);
+        }
+
+        // Запускаем изменение ссылки каждые 150 миллисекунд, чтобы её было невозможно скопировать
+        setInterval(randomizeURL, 150);
+
+        // Получаем защитный токен с сервера при загрузке
         async function initSession() {
             try {
                 let response = await fetch('/api/get-token');
