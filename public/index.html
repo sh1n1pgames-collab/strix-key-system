@@ -1,61 +1,173 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Система ключей Strix Visuals</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Strix Visuals — Key System</title>
     <style>
-        body { font-family: Arial, sans-serif; background: #121212; color: #fff; text-align: center; padding-top: 50px; }
-        .container { max-width: 400px; margin: auto; background: #1e1e1e; padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
-        button { background: #4CAF50; color: white; border: none; padding: 12px 20px; cursor: pointer; border-radius: 4px; font-size: 16px; width: 100%; margin-top: 10px; }
-        button:hover { background: #45a049; }
-        input { width: 90%; padding: 10px; margin-top: 15px; background: #2d2d2d; border: 1px solid #444; color: #fff; text-align: center; border-radius: 4px; font-size: 14px; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            background-color: #0f1117;
+            color: #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 30px;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+            text-align: center;
+        }
+        h2 {
+            font-size: 24px;
+            margin-bottom: 10px;
+            color: #58a6ff;
+        }
+        p {
+            color: #8b949e;
+            font-size: 14px;
+            margin-bottom: 25px;
+            line-height: 1.5;
+        }
+        .btn-task {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background-color: #21262d;
+            color: #c9d1d9;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            font-size: 15px;
+            font-weight: 600;
+            text-decoration: none;
+            margin-bottom: 15px;
+            transition: all 0.2s ease;
+        }
+        .btn-task:hover {
+            background-color: #30363d;
+            color: #ffffff;
+            border-color: #8b949e;
+        }
+        .btn-generate {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background-color: #238636;
+            color: #ffffff;
+            border: none;
+            border-radius: 6px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: not-allowed;
+            opacity: 0.6;
+            transition: all 0.2s ease;
+        }
+        .btn-generate.active {
+            cursor: pointer;
+            opacity: 1;
+        }
+        .btn-generate.active:hover {
+            background-color: #2ea043;
+        }
+        .key-container {
+            margin-top: 20px;
+            display: none;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            background-color: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: #58a6ff;
+            text-align: center;
+            font-size: 15px;
+            font-weight: bold;
+            outline: none;
+        }
+        .footer {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #484f58;
+        }
     </style>
 </head>
 <body>
 
-    <div class="container">
+    <div class="card">
         <h2>Strix Key System</h2>
-        <p>Пройди необходимые задания, затем нажми кнопку ниже, чтобы получить ключ.</p>
-        <button id="generateBtn">Получить ключ</button>
-        <br>
-        <input type="text" id="keyOutput" readonly placeholder="Твой ключ появится здесь...">
+        <p id="statusText">Complete the task below to unlock your 7-day access key for Strix Visuals.</p>
+
+        <a id="taskLink" class="btn-task" href="https://adfly.site/12uH5xk" target="_blank">1. Complete Task / View Ads</a>
+
+        <button id="generateBtn" class="btn-generate" disabled>Get Your Key</button>
+
+        <div id="keyBox" class="key-container">
+            <input type="text" id="keyOutput" readonly>
+        </div>
+
+        <div class="footer">Secure HWID Key System</div>
     </div>
 
     <script>
-        // Ссылка на твой бэкенд (главный адрес сайта)
-        const BACKEND_URL = "/api/generate-key";
+        const taskLink = document.getElementById('taskLink');
+        const generateBtn = document.getElementById('generateBtn');
+        const statusText = document.getElementById('statusText');
+        const keyBox = document.getElementById('keyBox');
+        const keyOutput = document.getElementById('keyOutput');
 
-        document.getElementById('generateBtn').addEventListener('click', async () => {
-            const btn = document.getElementById('generateBtn');
-            const keyInput = document.getElementById('keyOutput');
-            
-            btn.innerText = "Генерация...";
-            btn.disabled = true;
+        let taskCompleted = false;
+
+        // Когда пользователь кликает по ссылке с рекламой
+        taskLink.addEventListener('click', () => {
+            taskCompleted = true;
+            generateBtn.disabled = false;
+            generateBtn.classList.add('active');
+            statusText.innerText = "Task completed! You can now generate your key.";
+        });
+
+        // Запрос ключа на сервере
+        generateBtn.addEventListener('click', async () => {
+            if (!taskCompleted) return;
+
+            generateBtn.innerText = "Generating...";
+            generateBtn.disabled = true;
 
             try {
-                let response = await fetch(BACKEND_URL, {
+                let response = await fetch("/api/generate-key", {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
+                    headers: { 'Content-Type': 'application/json' }
                 });
 
                 let data = await response.json();
 
                 if (data.success) {
-                    keyInput.value = data.key;
-                    btn.innerText = "Ключ получен!";
-                    keyInput.select();
+                    keyOutput.value = data.key;
+                    keyBox.style.display = "block";
+                    generateBtn.style.display = "none";
+                    statusText.innerText = "Your key has been successfully generated!";
+                    keyOutput.select();
                 } else {
-                    alert("Ошибка при создании ключа.");
-                    btn.innerText = "Получить ключ";
-                    btn.disabled = false;
+                    alert("Error generating key. Please try again.");
+                    generateBtn.innerText = "Get Your Key";
+                    generateBtn.disabled = false;
                 }
             } catch (error) {
-                console.error("Ошибка связи:", error);
-                alert("Не удалось подключиться к серверу.");
-                btn.innerText = "Получить ключ";
-                btn.disabled = false;
+                console.error("Connection error:", error);
+                alert("Failed to connect to the server.");
+                generateBtn.innerText = "Get Your Key";
+                generateBtn.disabled = false;
             }
         });
     </script>
