@@ -40,25 +40,6 @@
             margin-bottom: 25px;
             line-height: 1.5;
         }
-        .btn-task {
-            display: block;
-            width: 100%;
-            padding: 12px;
-            background-color: #21262d;
-            color: #c9d1d9;
-            border: 1px solid #30363d;
-            border-radius: 6px;
-            font-size: 15px;
-            font-weight: 600;
-            text-decoration: none;
-            margin-bottom: 15px;
-            transition: all 0.2s ease;
-        }
-        .btn-task:hover {
-            background-color: #30363d;
-            color: #ffffff;
-            border-color: #8b949e;
-        }
         .btn-generate {
             display: block;
             width: 100%;
@@ -69,15 +50,10 @@
             border-radius: 6px;
             font-size: 15px;
             font-weight: 600;
-            cursor: not-allowed;
-            opacity: 0.6;
+            cursor: pointer;
             transition: all 0.2s ease;
         }
-        .btn-generate.active {
-            cursor: pointer;
-            opacity: 1;
-        }
-        .btn-generate.active:hover {
+        .btn-generate:hover {
             background-color: #2ea043;
         }
         .key-container {
@@ -107,11 +83,9 @@
 
     <div class="card">
         <h2>Strix Key System</h2>
-        <p id="statusText">Complete the task below to unlock your 7-day access key for Strix Visuals.</p>
+        <p id="statusText">Click the button below to generate your 7-day access key.</p>
 
-        <a id="taskLink" class="btn-task" href="https://adfly.site/12uH5xk" target="_blank">1. Complete Task / View Ads</a>
-
-        <button id="generateBtn" class="btn-generate" disabled>Get Your Key</button>
+        <button id="generateBtn" class="btn-generate">Get Your Key</button>
 
         <div id="keyBox" class="key-container">
             <input type="text" id="keyOutput" readonly>
@@ -121,26 +95,12 @@
     </div>
 
     <script>
-        const taskLink = document.getElementById('taskLink');
         const generateBtn = document.getElementById('generateBtn');
         const statusText = document.getElementById('statusText');
         const keyBox = document.getElementById('keyBox');
         const keyOutput = document.getElementById('keyOutput');
 
-        let taskCompleted = false;
-
-        // Когда пользователь кликает по ссылке с рекламой
-        taskLink.addEventListener('click', () => {
-            taskCompleted = true;
-            generateBtn.disabled = false;
-            generateBtn.classList.add('active');
-            statusText.innerText = "Task completed! You can now generate your key.";
-        });
-
-        // Запрос ключа на сервере
         generateBtn.addEventListener('click', async () => {
-            if (!taskCompleted) return;
-
             generateBtn.innerText = "Generating...";
             generateBtn.disabled = true;
 
