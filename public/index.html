@@ -18,7 +18,7 @@
             justify-content: center;
             align-items: center;
             height: 100vh;
-            user-select: none; /* Запрещаем выделение текста на сайте, чтобы не копировали */
+            user-select: none;
         }
         .card {
             background: #161b22;
@@ -77,7 +77,7 @@
             font-size: 15px;
             font-weight: bold;
             outline: none;
-            user-select: text; /* Ключ копировать разрешаем */
+            user-select: text;
         }
         .footer {
             margin-top: 20px;
@@ -90,7 +90,7 @@
 
     <div class="card">
         <h2>Strix Key System</h2>
-        <p id="statusText">Initializing secure session...</p>
+        <p id="statusText">Checking verification ticket...</p>
 
         <button id="generateBtn" class="btn-generate" disabled>Loading...</button>
 
@@ -108,35 +108,43 @@
         const keyBox = document.getElementById('keyBox');
         const keyOutput = document.getElementById('keyOutput');
 
-        // Функция подмены ссылки на «троллинг-заглушку», если человек попытается скопировать/посмотреть адрес
-        function activateTrollLink() {
+        // Подмена адреса при попытке копирования
+        function applyFakeURL() {
             const trollUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?error=nice_try_no_key_for_you_idiot';
             window.history.replaceState({path: trollUrl}, '', trollUrl);
         }
 
-        // Ловим попытку скопировать ссылку (Ctrl+C или выделение адресной строки)
         document.addEventListener('copy', (event) => {
-            activateTrollLink();
-            // Подменяем то, что попадает в буфер обмена
+            applyFakeURL();
             event.clipboardData.setData('text/plain', 'https://strix-key-system.onrender.com/?error=nice_try_no_key_for_you_idiot');
             event.preventDefault();
         });
 
-        // Также меняем URL сразу при попытке кликнуть на адресную строку или уйти со страницы
-        window.addEventListener('blur', activateTrollLink);
+        window.addEventListener('blur', applyFakeURL);
 
-        // Получаем защитный токен с сервера при загрузке
+        // Инициализация
         async function initSession() {
+            // Читаем параметр ticket из текущего адреса
+            const urlParams = new URLSearchParams(window.location.search);
+            const userTicket = urlParams.get('ticket');
+
             try {
-                let response = await fetch('/api/get-token');
+                let response = await fetch('/api/get-token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticket: userTicket })
+                });
+                
                 let data = await response.json();
+
                 if (data.success) {
                     sessionToken = data.token;
                     generateBtn.disabled = false;
                     generateBtn.innerText = "Get Your Key";
                     statusText.innerText = "Click the button below to generate your 7-day access key.";
                 } else {
-                    statusText.innerText = "Failed to initialize security session.";
+                    statusText.innerText = "Access Denied: Complete the task link first to access this page.";
+                    generateBtn.innerText = "Access Blocked";
                 }
             } catch (error) {
                 statusText.innerText = "Connection error with server.";
@@ -148,7 +156,6 @@
         generateBtn.addEventListener('click', async () => {
             if (!sessionToken) return;
 
-            generateBtn.generateBtn = true; // защита от флуда
             generateBtn.innerText = "Generating...";
             generateBtn.disabled = true;
 
