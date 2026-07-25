@@ -159,6 +159,32 @@ app.post('/api/verify-key', (req, res) => {
     });
 });
 
+// -------------------------------------------------------------
+// 4. АВТОМАТИЧЕСКАЯ ОЧИСТКА БАЗЫ ДАННЫХ (Раз в час)
+// -------------------------------------------------------------
+setInterval(() => {
+    const now = new Date().toISOString();
+    
+    // Удаляем ключи с истекшим сроком
+    db.run(`DELETE FROM keys WHERE expires_at < ?`, [now], function(err) {
+        if (err) {
+            console.error('Error cleaning expired keys:', err.message);
+        } else if (this.changes > 0) {
+            console.log(`Cleaned up ${this.changes} expired keys from database.`);
+        }
+    });
+    
+    // Удаляем одноразовые токены старше 1 часа
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    db.run(`DELETE FROM tokens WHERE created_at < ?`, [oneHourAgo], function(err) {
+        if (err) {
+            console.error('Error cleaning old tokens:', err.message);
+        } else if (this.changes > 0) {
+            console.log(`Cleaned up ${this.changes} old tokens from database.`);
+        }
+    });
+}, 60 * 60 * 1000);
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
