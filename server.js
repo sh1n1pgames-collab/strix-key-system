@@ -7,19 +7,19 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Раздаем статические файлы сайта из папки 'public' по главному адресу
+// Раздаем красивый сайт из папки 'public' по главному адресу
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Подключаем или создаем локальную базу данных SQLite
+// Подключаем базу данных SQLite
 const db = new sqlite3.Database('./keys.db', (err) => {
     if (err) {
-        console.error('Ошибка подключения к базе данных:', err.message);
+        console.error('Database connection error:', err.message);
     } else {
-        console.log('Успешное подключение к базе данных SQLite.');
+        console.log('Connected to SQLite database successfully.');
     }
 });
 
-// Создаем таблицу для ключей, если её еще нет
+// Создаем таблицу для ключей
 db.serialize(() => {
     db.run(`
         CREATE TABLE IF NOT EXISTS keys (
@@ -30,23 +30,21 @@ db.serialize(() => {
     `);
 });
 
-// Генератор случайного ключа
+// Генератор ключа
 function generateRandomKey() {
     return 'STRIX-' + Math.random().toString(36).substring(2, 8).toUpperCase() + '-' + Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
 // -------------------------------------------------------------
-// 1. ЭНДПОИНТ ДЛЯ САЙТА: Создание ключа
+// ЭНДПОИНТ: Генерация ключа (вызывается кнопкой на сайте)
 // -------------------------------------------------------------
 app.post('/api/generate-key', (req, res) => {
     const newKey = generateRandomKey();
-    
-    // Ключ действует ровно 7 дней с момента создания
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
     db.run(`INSERT INTO keys (key, hwid, expires_at) VALUES (?, NULL, ?)`, [newKey, expiresAt], (err) => {
         if (err) {
-            return res.status(500).json({ success: false, error: 'Ошибка сохранения ключа в базе данных' });
+            return res.status(500).json({ success: false, error: 'Database save error' });
         }
         res.json({
             success: true,
@@ -57,50 +55,43 @@ app.post('/api/generate-key', (req, res) => {
 });
 
 // -------------------------------------------------------------
-// 2. ЭНДПОИНТ ДЛЯ СКРИПТА В ИГРЕ: Проверка ключа и HWID
+// ЭНДПОИНТ: Проверка ключа и HWID (вызывается из скрипта в игре)
 // -------------------------------------------------------------
 app.post('/api/verify-key', (req, res) => {
     const { key, hwid } = req.body;
 
     if (!key || !hwid) {
-        return res.json({ success: false, message: 'Отсутствует ключ или HWID' });
+        return res.json({ success: false, message: 'Missing key or HWID' });
     }
 
-    // Ищем ключ в базе данных
     db.get(`SELECT * FROM keys WHERE key = ?`, [key], (err, row) => {
         if (err || !row) {
-            return res.json({ success: false, message: 'Ключ не найден в системе!' });
+            return res.json({ success: false, message: 'Key not found in system!' });
         }
 
-        // Проверяем срок действия ключа (не истекли ли 7 дней)
         const now = new Date();
         const expirationDate = new Date(row.expires_at);
 
         if (now > expirationDate) {
-            return res.json({ success: false, message: 'Срок действия ключа (7 дней) истёк!' });
+            return res.json({ success: false, message: 'Key has expired (7 days limit)!' });
         }
 
-        // Проверяем привязку по HWID
         if (!row.hwid) {
-            // Первая активация: привязываем железо к этому ключу
             db.run(`UPDATE keys SET hwid = ? WHERE key = ?`, [hwid, key], (updateErr) => {
                 if (updateErr) {
-                    return res.json({ success: false, message: 'Ошибка привязки HWID' });
+                    return res.json({ success: false, message: 'HWID binding error' });
                 }
-                return res.json({ success: true, message: 'Ключ успешно активирован и привязан к ПК!' });
+                return res.json({ success: true, message: 'Key successfully activated and bound to your PC!' });
             });
         } else if (row.hwid === hwid) {
-            // HWID совпадает — доступ разрешен
-            return res.json({ success: true, message: 'Доступ разрешен!' });
+            return res.json({ success: true, message: 'Access granted!' });
         } else {
-            // HWID не совпадает (попытка использовать чужой ключ)
-            return res.json({ success: false, message: 'Этот ключ привязан к другому устройству!' });
+            return res.json({ success: false, message: 'This key is bound to another device!' });
         }
     });
 });
 
-// Запуск сервера на порту, который выдает Render, либо на 3000 локально
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Сервер успешно запущен и работает на порту ${PORT}`);
+    console.log(`Server is running on port ${PORT}`);
 });
