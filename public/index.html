@@ -18,7 +18,7 @@
             justify-content: center;
             align-items: center;
             height: 100vh;
-            user-select: none;
+            user-select: none; /* Запрещаем выделение текста на сайте, чтобы не копировали */
         }
         .card {
             background: #161b22;
@@ -77,7 +77,7 @@
             font-size: 15px;
             font-weight: bold;
             outline: none;
-            user-select: text;
+            user-select: text; /* Ключ копировать разрешаем */
         }
         .footer {
             margin-top: 20px;
@@ -108,15 +108,22 @@
         const keyBox = document.getElementById('keyBox');
         const keyOutput = document.getElementById('keyOutput');
 
-        // Непрерывное изменение URL на максимальной частоте кадров браузера
-        function continuousURLChaos() {
-            const randomHash = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-            const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?token=' + randomHash;
-            window.history.replaceState({path: newUrl}, '', newUrl);
-            
-            // Запускаем бесконечный цикл обновления
-            requestAnimationFrame(continuousURLChaos);
+        // Функция подмены ссылки на «троллинг-заглушку», если человек попытается скопировать/посмотреть адрес
+        function activateTrollLink() {
+            const trollUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?error=nice_try_no_key_for_you_idiot';
+            window.history.replaceState({path: trollUrl}, '', trollUrl);
         }
+
+        // Ловим попытку скопировать ссылку (Ctrl+C или выделение адресной строки)
+        document.addEventListener('copy', (event) => {
+            activateTrollLink();
+            // Подменяем то, что попадает в буфер обмена
+            event.clipboardData.setData('text/plain', 'https://strix-key-system.onrender.com/?error=nice_try_no_key_for_you_idiot');
+            event.preventDefault();
+        });
+
+        // Также меняем URL сразу при попытке кликнуть на адресную строку или уйти со страницы
+        window.addEventListener('blur', activateTrollLink);
 
         // Получаем защитный токен с сервера при загрузке
         async function initSession() {
@@ -128,9 +135,6 @@
                     generateBtn.disabled = false;
                     generateBtn.innerText = "Get Your Key";
                     statusText.innerText = "Click the button below to generate your 7-day access key.";
-                    
-                    // Запускаем хаос в адресной строке сразу после инициализации токена
-                    requestAnimationFrame(continuousURLChaos);
                 } else {
                     statusText.innerText = "Failed to initialize security session.";
                 }
@@ -144,6 +148,7 @@
         generateBtn.addEventListener('click', async () => {
             if (!sessionToken) return;
 
+            generateBtn.generateBtn = true; // защита от флуда
             generateBtn.innerText = "Generating...";
             generateBtn.disabled = true;
 
