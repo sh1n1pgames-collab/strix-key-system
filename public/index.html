@@ -56,6 +56,11 @@
         .btn-generate:hover {
             background-color: #2ea043;
         }
+        .btn-generate:disabled {
+            background-color: #30363d;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
         .key-container {
             margin-top: 20px;
             display: none;
@@ -83,31 +88,55 @@
 
     <div class="card">
         <h2>Strix Key System</h2>
-        <p id="statusText">Click the button below to generate your 7-day access key.</p>
+        <p id="statusText">Initializing secure session...</p>
 
-        <button id="generateBtn" class="btn-generate">Get Your Key</button>
+        <button id="generateBtn" class="btn-generate" disabled>Loading...</button>
 
         <div id="keyBox" class="key-container">
             <input type="text" id="keyOutput" readonly>
         </div>
 
-        <div class="footer">Secure HWID Key System</div>
+        <div class="footer">Secure HWID & IP Key System</div>
     </div>
 
     <script>
+        let sessionToken = null;
         const generateBtn = document.getElementById('generateBtn');
         const statusText = document.getElementById('statusText');
         const keyBox = document.getElementById('keyBox');
         const keyOutput = document.getElementById('keyOutput');
 
+        // При загрузке страницы получаем уникальный защитный токен с сервера
+        async function initSession() {
+            try {
+                let response = await fetch('/api/get-token');
+                let data = await response.json();
+                if (data.success) {
+                    sessionToken = data.token;
+                    generateBtn.disabled = false;
+                    generateBtn.innerText = "Get Your Key";
+                    statusText.innerText = "Click the button below to generate your 7-day access key.";
+                } else {
+                    statusText.innerText = "Failed to initialize security session.";
+                }
+            } catch (error) {
+                statusText.innerText = "Connection error with server.";
+            }
+        }
+
+        initSession();
+
         generateBtn.addEventListener('click', async () => {
+            if (!sessionToken) return;
+
             generateBtn.innerText = "Generating...";
             generateBtn.disabled = true;
 
             try {
                 let response = await fetch("/api/generate-key", {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: sessionToken })
                 });
 
                 let data = await response.json();
@@ -119,7 +148,7 @@
                     statusText.innerText = "Your key has been successfully generated!";
                     keyOutput.select();
                 } else {
-                    alert("Error generating key. Please try again.");
+                    alert(data.message || "Error generating key.");
                     generateBtn.innerText = "Get Your Key";
                     generateBtn.disabled = false;
                 }
