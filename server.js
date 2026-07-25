@@ -8,20 +8,18 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Убеждаемся, что Render правильно определяет IP-адреса за прокси
 app.set('trust proxy', true);
 
 app.use(express.static(path.join(__dirname, 'public')));
 
 const db = new sqlite3.Database('./keys.db', (err) => {
     if (err) {
-        console.error('Database connection error:', err.message);
+        console.error('Database error:', err.message);
     } else {
-        console.log('Connected to SQLite database successfully.');
+        console.log('Database connected.');
     }
 });
 
-// Создаем расширенную таблицу с полем ip и токенами
 db.serialize(() => {
     db.run(`
         CREATE TABLE IF NOT EXISTS keys (
@@ -45,36 +43,46 @@ function generateRandomKey() {
     return 'STRIX-' + Math.random().toString(36).substring(2, 8).toUpperCase() + '-' + Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
+// Секретный билет, который передается в ссылке после выполнения задания
+const VALID_TICKET = 'strix_passed_2026';
+
 // -------------------------------------------------------------
-// 1. ВЫДАЧА УНИКАЛЬНОГО ТОКЕНА ДЛЯ СТРАНИЦЫ
+// 1. ВЫДАЧА ТОКЕНА (Только при наличии верного билета)
 // -------------------------------------------------------------
-app.get('/api/get-token', (req, res) => {
+app.post('/api/get-token', (req, res) => {
     const clientIp = req.ip;
+    const { ticket } = req.body;
+
+    // Если билет отсутствует или неверный — отказываем в выдаче токена
+    if (!ticket || ticket !== VALID_TICKET) {
+        return res.json({ success: false, message: 'Access Denied. Task not verified.' });
+    }
+
     const token = crypto.randomBytes(16).toString('hex');
     const now = new Date().toISOString();
 
     db.run(`INSERT INTO tokens (token, ip, created_at) VALUES (?, ?, ?)`, [token, clientIp, now], (err) => {
         if (err) {
-            return res.json({ success: false, error: 'Token generation error' });
+            return res.json({ success: false, message: 'Token error' });
         }
         res.json({ success: true, token: token });
     });
 });
 
 // -------------------------------------------------------------
-// 2. ГЕНЕРАЦИЯ КЛЮЧА С ЗАЩИТОЙ ПО IP (1 раз в 7 дней)
+// 2. ГЕНЕРАЦИЯ КЛЮЧА
 // -------------------------------------------------------------
 app.post('/api/generate-key', (req, res) => {
     const clientIp = req.ip;
     const { token } = req.body;
 
     if (!token) {
-        return res.json({ success: false, message: 'Invalid session token' });
+        return res.json({ success: false, message: 'Invalid token' });
     }
 
     db.get(`SELECT * FROM tokens WHERE token = ? AND ip = ?`, [token, clientIp], (err, tokenRow) => {
         if (err || !tokenRow) {
-            return res.json({ success: false, message: 'Security check failed. Please refresh the page.' });
+            return res.json({ success: false, message: 'Security check failed. Please return to the task link.' });
         }
 
         db.get(`SELECT * FROM keys WHERE ip = ? ORDER BY expires_at DESC LIMIT 1`, [clientIp], (err, row) => {
@@ -85,7 +93,7 @@ app.post('/api/generate-key', (req, res) => {
                 if (now < expirationDate) {
                     return res.json({ 
                         success: false, 
-                        message: 'You have already generated a key from this IP. Try again later.' 
+                        message: 'You have already generated a key from this IP. Try again in 7 days.' 
                     });
                 }
             }
@@ -97,7 +105,7 @@ app.post('/api/generate-key', (req, res) => {
 
             db.run(`INSERT INTO keys (key, hwid, ip, expires_at) VALUES (?, NULL, ?, ?)`, [newKey, clientIp, expiresAt], (insertErr) => {
                 if (insertErr) {
-                    return res.status(500).json({ success: false, error: 'Database save error' });
+                    return res.status(500).json({ success: false, message: 'Database error' });
                 }
                 res.json({
                     success: true,
@@ -110,7 +118,7 @@ app.post('/api/generate-key', (req, res) => {
 });
 
 // -------------------------------------------------------------
-// 3. ПРОВЕРКА КЛЮЧА И HWID В ИГРЕ
+// 3. ПРОВЕРКА КЛЮЧА В ИГРЕ
 // -------------------------------------------------------------
 app.post('/api/verify-key', (req, res) => {
     const { key, hwid } = req.body;
@@ -121,32 +129,32 @@ app.post('/api/verify-key', (req, res) => {
 
     db.get(`SELECT * FROM keys WHERE key = ?`, [key], (err, row) => {
         if (err || !row) {
-            return res.json({ success: false, message: 'Key not found in system!' });
+            return res.json({ success: false, message: 'Key not found!' });
         }
 
         const now = new Date();
         const expirationDate = new Date(row.expires_at);
 
         if (now > expirationDate) {
-            return res.json({ success: false, message: 'Key has expired (7 days limit)!' });
+            return res.json({ success: false, message: 'Key expired!' });
         }
 
         if (!row.hwid) {
             db.run(`UPDATE keys SET hwid = ? WHERE key = ?`, [hwid, key], (updateErr) => {
                 if (updateErr) {
-                    return res.json({ success: false, message: 'HWID binding error' });
+                    return res.json({ success: false, message: 'HWID bind error' });
                 }
-                return res.json({ success: true, message: 'Key successfully activated and bound to your PC!' });
+                return res.json({ success: true, message: 'Key bound to device!' });
             });
         } else if (row.hwid === hwid) {
             return res.json({ success: true, message: 'Access granted!' });
         } else {
-            return res.json({ success: false, message: 'This key is bound to another device!' });
+            return res.json({ success: false, message: 'Key bound to another device!' });
         }
     });
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
