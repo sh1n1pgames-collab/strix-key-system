@@ -41,7 +41,7 @@
             margin-bottom: 25px;
             line-height: 1.5;
         }
-        .btn-generate {
+        .btn-generate, .btn-copy {
             display: block;
             width: 100%;
             padding: 12px;
@@ -53,8 +53,9 @@
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s ease;
+            margin-top: 10px;
         }
-        .btn-generate:hover {
+        .btn-generate:hover, .btn-copy:hover {
             background-color: #2ea043;
         }
         .btn-generate:disabled {
@@ -77,7 +78,7 @@
             font-size: 15px;
             font-weight: bold;
             outline: none;
-            user-select: text;
+            user-select: none;
         }
         .footer {
             margin-top: 20px;
@@ -96,6 +97,7 @@
 
         <div id="keyBox" class="key-container">
             <input type="text" id="keyOutput" readonly>
+            <button id="copyBtn" class="btn-copy">Copy Key</button>
         </div>
 
         <div class="footer">Secure Anti-Bypass System</div>
@@ -107,28 +109,27 @@
         const statusText = document.getElementById('statusText');
         const keyBox = document.getElementById('keyBox');
         const keyOutput = document.getElementById('keyOutput');
+        const copyBtn = document.getElementById('copyBtn');
 
-        // Считываем билет ДО того, как очистим/подменим URL
         const urlParams = new URLSearchParams(window.location.search);
         const userTicket = urlParams.get('ticket');
 
-        // Мгновенная замена адреса в адресной строке при входе
         function eraseAndTrollURL() {
             const trollUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?error=nice_try_no_key_for_you_idiot';
             window.history.replaceState({path: trollUrl}, '', trollUrl);
         }
 
-        // Вызываем подмену сразу при старте скрипта
         eraseAndTrollURL();
 
-        // Защита от выделения / копирования
+        // Жесткая блокировка копирования на всей странице без исключений
         document.addEventListener('copy', (event) => {
             eraseAndTrollURL();
             event.clipboardData.setData('text/plain', window.location.protocol + "//" + window.location.host + '/?error=nice_try_no_key_for_you_idiot');
             event.preventDefault();
         });
 
-        // Инициализация сессии на сервере
+        window.addEventListener('blur', eraseAndTrollURL);
+
         async function initSession() {
             try {
                 let response = await fetch('/api/get-token', {
@@ -175,7 +176,6 @@
                     keyBox.style.display = "block";
                     generateBtn.style.display = "none";
                     statusText.innerText = "Your key has been successfully generated!";
-                    keyOutput.select();
                 } else {
                     alert(data.message || "Error generating key.");
                     generateBtn.innerText = "Get Your Key";
@@ -187,6 +187,27 @@
                 generateBtn.innerText = "Get Your Key";
                 generateBtn.disabled = false;
             }
+        });
+
+        // Кнопка копирования работает независимо от запретов выделения
+        copyBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(keyOutput.value).then(() => {
+                copyBtn.innerText = "Copied!";
+                setTimeout(() => {
+                    copyBtn.innerText = "Copy Key";
+                }, 2000);
+            }).catch(err => {
+                // Запасной вариант для старых браузеров
+                keyOutput.focus();
+                keyOutput.select();
+                try {
+                    document.execCommand('copy');
+                    copyBtn.innerText = "Copied!";
+                    setTimeout(() => { copyBtn.innerText = "Copy Key"; }, 2000);
+                } catch (e) {
+                    alert("Failed to copy key automatically.");
+                }
+            });
         });
     </script>
 
