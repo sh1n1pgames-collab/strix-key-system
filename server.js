@@ -53,7 +53,6 @@ app.get('/api/get-token', (req, res) => {
     const token = crypto.randomBytes(16).toString('hex');
     const now = new Date().toISOString();
 
-    // Сохраняем временный токен для этого IP
     db.run(`INSERT INTO tokens (token, ip, created_at) VALUES (?, ?, ?)`, [token, clientIp, now], (err) => {
         if (err) {
             return res.json({ success: false, error: 'Token generation error' });
@@ -70,39 +69,35 @@ app.post('/api/generate-key', (req, res) => {
     const { token } = req.body;
 
     if (!token) {
-        return.json({ success: false, message: 'Invalid session token' });
+        return res.json({ success: false, message: 'Invalid session token' });
     }
 
-    // Проверяем, существует ли токен и принадлежит ли он этому IP
     db.get(`SELECT * FROM tokens WHERE token = ? AND ip = ?`, [token, clientIp], (err, tokenRow) => {
         if (err || !tokenRow) {
-            return.json({ success: false, message: 'Security check failed. Please refresh the page.' });
+            return res.json({ success: false, message: 'Security check failed. Please refresh the page.' });
         }
 
-        // Проверяем, получал ли этот IP ключ за последние 7 дней
         db.get(`SELECT * FROM keys WHERE ip = ? ORDER BY expires_at DESC LIMIT 1`, [clientIp], (err, row) => {
             if (row) {
                 const now = new Date();
                 const expirationDate = new Date(row.expires_at);
 
                 if (now < expirationDate) {
-                    return.json({ 
+                    return res.json({ 
                         success: false, 
                         message: 'You have already generated a key from this IP. Try again later.' 
                     });
                 }
             }
 
-            // Удаляем использованный токен, чтобы его нельзя было применить повторно
             db.run(`DELETE FROM tokens WHERE token = ?`, [token]);
 
-            // Создаем новый ключ
             const newKey = generateRandomKey();
             const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
             db.run(`INSERT INTO keys (key, hwid, ip, expires_at) VALUES (?, NULL, ?, ?)`, [newKey, clientIp, expiresAt], (insertErr) => {
                 if (insertErr) {
-                    return.status(500).json({ success: false, error: 'Database save error' });
+                    return res.status(500).json({ success: false, error: 'Database save error' });
                 }
                 res.json({
                     success: true,
@@ -121,32 +116,32 @@ app.post('/api/verify-key', (req, res) => {
     const { key, hwid } = req.body;
 
     if (!key || !hwid) {
-        return.json({ success: false, message: 'Missing key or HWID' });
+        return res.json({ success: false, message: 'Missing key or HWID' });
     }
 
     db.get(`SELECT * FROM keys WHERE key = ?`, [key], (err, row) => {
         if (err || !row) {
-            return.json({ success: false, message: 'Key not found in system!' });
+            return res.json({ success: false, message: 'Key not found in system!' });
         }
 
         const now = new Date();
         const expirationDate = new Date(row.expires_at);
 
         if (now > expirationDate) {
-            return.json({ success: false, message: 'Key has expired (7 days limit)!' });
+            return res.json({ success: false, message: 'Key has expired (7 days limit)!' });
         }
 
         if (!row.hwid) {
             db.run(`UPDATE keys SET hwid = ? WHERE key = ?`, [hwid, key], (updateErr) => {
                 if (updateErr) {
-                    return.json({ success: false, message: 'HWID binding error' });
+                    return res.json({ success: false, message: 'HWID binding error' });
                 }
-                return.json({ success: true, message: 'Key successfully activated and bound to your PC!' });
+                return res.json({ success: true, message: 'Key successfully activated and bound to your PC!' });
             });
         } else if (row.hwid === hwid) {
-            return.json({ success: true, message: 'Access granted!' });
+            return res.json({ success: true, message: 'Access granted!' });
         } else {
-            return.json({ success: false, message: 'This key is bound to another device!' });
+            return res.json({ success: false, message: 'This key is bound to another device!' });
         }
     });
 });
