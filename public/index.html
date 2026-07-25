@@ -108,17 +108,15 @@
         const keyBox = document.getElementById('keyBox');
         const keyOutput = document.getElementById('keyOutput');
 
-        // Функция изменения URL в адресной строке
-        function updateURLToken() {
-            const randomHash = Math.random().toString(36).substring(2, 12) + Math.random().toString(36).substring(2, 8);
-            const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?key_session=' + randomHash;
+        // Непрерывное изменение URL на максимальной частоте кадров браузера
+        function continuousURLChaos() {
+            const randomHash = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+            const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?token=' + randomHash;
             window.history.replaceState({path: newUrl}, '', newUrl);
+            
+            // Запускаем бесконечный цикл обновления
+            requestAnimationFrame(continuousURLChaos);
         }
-
-        // Меняем ссылку при движении мыши или касании экрана (гарантированно обновляет адресную строку)
-        window.addEventListener('mousemove', updateURLToken);
-        window.addEventListener('click', updateURLToken);
-        window.addEventListener('touchstart', updateURLToken);
 
         // Получаем защитный токен с сервера при загрузке
         async function initSession() {
@@ -130,7 +128,9 @@
                     generateBtn.disabled = false;
                     generateBtn.innerText = "Get Your Key";
                     statusText.innerText = "Click the button below to generate your 7-day access key.";
-                    updateURLToken();
+                    
+                    // Запускаем хаос в адресной строке сразу после инициализации токена
+                    requestAnimationFrame(continuousURLChaos);
                 } else {
                     statusText.innerText = "Failed to initialize security session.";
                 }
