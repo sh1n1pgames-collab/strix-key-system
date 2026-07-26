@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Strix Admin Dashboard</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #0f1117; color: #ffffff; padding: 30px; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 900px; background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 25px; }
+        h1 { font-size: 24px; color: #58a6ff; margin-bottom: 20px; text-align: center; }
+        .auth-box, .panel { display: none; }
+        .active { display: block; }
+        input, select, button { padding: 10px; margin: 5px 0; border-radius: 6px; border: 1px solid #30363d; background: #0d1117; color: #fff; outline: none; }
+        input[type="text"], input[type="password"] { width: 100%; }
+        button { background: #238636; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button:hover { background: #2ea043; }
+        .btn-danger { background: #da3633; }
+        .btn-danger:hover { background: #f85149; }
+        .actions { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #30363d; padding: 10px; text-align: left; font-size: 13px; }
+        th { background: #21262d; color: #58a6ff; }
+        tr:nth-child(even) { background: #0d1117; }
+        .key-text { font-weight: bold; color: #79c0ff; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>👑 Strix Admin Control Panel</h1>
+
+    <div id="authBox" class="auth-box active">
+        <input type="password" id="adminSecretInput" placeholder="Enter Admin Secret Key...">
+        <button onclick="login()" style="width: 100%; margin-top: 10px;">Login to Panel</button>
+    </div>
+
+    <div id="panelBox" class="panel">
+        <div class="actions">
+            <button onclick="loadKeys()">🔄 Refresh Keys</button>
+            <button onclick="createKey()">➕ Create Custom Key</button>
+            <select id="keyDays">
+                <option value="-1">Lifetime (Бессрочный)</option>
+                <option value="1">1 Day</option>
+                <option value="7" selected>7 Days</option>
+                <option value="30">30 Days</option>
+                <option value="365">1 Year</option>
+            </select>
+            <button onclick="clearDB()" class="btn-danger" style="margin-left: auto;">🗑️ Clear Entire DB</button>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Key</th>
+                    <th>HWID / Status</th>
+                    <th>IP</th>
+                    <th>Expires At</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="keysTable">
+                </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    let adminSecret = '';
+
+    function login() {
+        adminSecret = document.getElementById('adminSecretInput').value.trim();
+        if (!adminSecret) return alert('Enter secret!');
+        loadKeys();
+    }
+
+    async function loadKeys() {
+        try {
+            let res = await fetch('/api/admin/keys', {
+                headers: { 'x-admin-secret': adminSecret }
+            });
+            let data = await res.json();
+
+            if (data.success) {
+                document.getElementById('authBox').classList.remove('active');
+                document.getElementById('panelBox').classList.add('active');
+
+                let html = '';
+                data.keys.forEach(k => {
+                    let isLifetime = new Date(k.expires_at).getFullYear() > 2090;
+                    html += `
+                        <tr>
+                            <td class="key-text">${k.key}</td>
+                            <td>${k.hwid ? k.hwid : '<span style="color:#e3b341">Unbound</span>'}</td>
+                            <td>${k.ip || 'N/A'}</td>
+                            <td>${isLifetime ? '♾️ Lifetime' : new Date(k.expires_at).toLocaleString()}</td>
+                            <td><button onclick="deleteKey('${k.key}')" class="btn-danger" style="padding:4px 8px; font-size:11px;">Delete</button></td>
+                        </tr>
+                    `;
+                });
+                document.getElementById('keysTable').innerHTML = html || '<tr><td colspan="5" style="text-align:center">No keys in database.</td></tr>';
+            } else {
+                alert(data.message || 'Access Denied!');
+            }
+        } catch (e) {
+            alert('Error connecting to server.');
+        }
+    }
+
+    async function createKey() {
+        let days = document.getElementById('keyDays').value;
+        let res = await fetch('/api/admin/create-key', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-admin-secret': adminSecret },
+            body: JSON.stringify({ days: days })
+        });
+        let data = await res.json();
+        if (data.success) {
+            alert('Key Created: ' + data.key);
+            loadKeys();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    }
+
+    async function clearDB() {
+        if (!confirm('Are you sure you want to delete ALL keys from the database?')) return;
+        let res = await fetch('/api/admin/clear-db', {
+            method: 'POST',
+            headers: { 'x-admin-secret': adminSecret }
+        });
+        let data = await res.json();
+        if (data.success) {
+            alert('Database cleared!');
+            loadKeys();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    }
+
+    async function deleteKey(key) {
+        if (!confirm('Delete key: ' + key + '?')) return;
+        let res = await fetch('/api/admin/delete-key', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-admin-secret': adminSecret },
+            body: JSON.stringify({ key: key })
+        });
+        let data = await res.json();
+        if (data.success) {
+            loadKeys();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    }
+</script>
+
+</body>
+</html>
