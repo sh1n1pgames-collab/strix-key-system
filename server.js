@@ -45,7 +45,7 @@ function generateRandomKey() {
 
 const VALID_TICKET = 'strix_passed_2026';
 // 🔑 СЕКРЕТНЫЙ ПАРОЛЬ АДМИНИСТРАТОРА (Поменяй на свой!)
-const ADMIN_SECRET = 'super_secret_admin_pass_2026';
+const ADMIN_SECRET = '231987';
 
 // Middleware для проверки админ-пароля
 function verifyAdmin(req, res, next) {
