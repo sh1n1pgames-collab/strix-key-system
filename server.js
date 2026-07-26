@@ -8,7 +8,6 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Убеждаемся, что Render правильно определяет IP-адреса за прокси
 app.set('trust proxy', true);
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -21,7 +20,6 @@ const db = new sqlite3.Database('./keys.db', (err) => {
     }
 });
 
-// Создаем таблицы для ключей и защитных токенов
 db.serialize(() => {
     db.run(`
         CREATE TABLE IF NOT EXISTS keys (
@@ -45,11 +43,22 @@ function generateRandomKey() {
     return 'STRIX-' + Math.random().toString(36).substring(2, 8).toUpperCase() + '-' + Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
-// Секретный билет, передаваемый при выполнении задания
 const VALID_TICKET = 'strix_passed_2026';
+// 🔑 СЕКРЕТНЫЙ ПАРОЛЬ АДМИНИСТРАТОРА (Поменяй на свой!)
+const ADMIN_SECRET = 'super_secret_admin_pass_2026';
+
+// Middleware для проверки админ-пароля
+function verifyAdmin(req, res, next) {
+    const adminPass = req.headers['x-admin-secret'];
+    if (adminPass && adminPass === ADMIN_SECRET) {
+        next();
+    } else {
+        res.status(403).json({ success: false, message: 'Forbidden: Invalid Admin Secret' });
+    }
+}
 
 // -------------------------------------------------------------
-// 1. ВЫДАЧА УНИКАЛЬНОГО ТОКЕНА (Только при наличии билета)
+// 1. ВЫДАЧА УНИКАЛЬНОГО ТОКЕНА
 // -------------------------------------------------------------
 app.post('/api/get-token', (req, res) => {
     const clientIp = req.ip;
@@ -71,7 +80,7 @@ app.post('/api/get-token', (req, res) => {
 });
 
 // -------------------------------------------------------------
-// 2. ГЕНЕРАЦИЯ КЛЮЧА (Срок на активацию — 1 час)
+// 2. ГЕНЕРАЦИЯ КЛЮЧА
 // -------------------------------------------------------------
 app.post('/api/generate-key', (req, res) => {
     const clientIp = req.ip;
@@ -102,7 +111,6 @@ app.post('/api/generate-key', (req, res) => {
             db.run(`DELETE FROM tokens WHERE token = ?`, [token]);
 
             const newKey = generateRandomKey();
-            // Даем 1 час на первую активацию в игре
             const activationDeadline = new Date(Date.now() + 1 * 60 * 60 * 1000).toISOString();
 
             db.run(`INSERT INTO keys (key, hwid, ip, expires_at) VALUES (?, NULL, ?, ?)`, [newKey, clientIp, activationDeadline], (insertErr) => {
@@ -120,7 +128,7 @@ app.post('/api/generate-key', (req, res) => {
 });
 
 // -------------------------------------------------------------
-// 3. ПРОВЕРКА И АКТИВАЦИЯ КЛЮЧА В ИГРЕ (7 дней от активации)
+// 3. ПРОВЕРКА И АКТИВАЦИЯ КЛЮЧА
 // -------------------------------------------------------------
 app.post('/api/verify-key', (req, res) => {
     const { key, hwid } = req.body;
@@ -141,7 +149,6 @@ app.post('/api/verify-key', (req, res) => {
             return res.json({ success: false, message: 'Key has expired!' });
         }
 
-        // Первая активация: привязываем HWID и отсчитываем 7 дней с этого момента
         if (!row.hwid) {
             const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -159,30 +166,64 @@ app.post('/api/verify-key', (req, res) => {
     });
 });
 
+// =============================================================
+// 👑 АДМИНСКИЕ ЭНДПОИНТЫ (Защищены паролем)
+// =============================================================
+
+// Получить список всех ключей
+app.get('/api/admin/keys', verifyAdmin, (req, res) => {
+    db.all(`SELECT * FROM keys ORDER BY expires_at DESC`, [], (err, rows) => {
+        if (err) return res.json({ success: false, message: err.message });
+        res.json({ success: true, keys: rows });
+    });
+});
+
+// Создать кастомный/бессрочный ключ
+app.post('/api/admin/create-key', verifyAdmin, (req, res) => {
+    const { days } = req.body; // дни (если -1 или null, то бессрочный)
+    const newKey = generateRandomKey();
+    
+    let expiresAt;
+    if (!days || days === -1) {
+        // Бессрочный ключ (на 100 лет вперед)
+        expiresAt = new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000).toISOString();
+    } else {
+        expiresAt = new Date(Date.now() + parseInt(days) * 24 * 60 * 60 * 1000).toISOString();
+    }
+
+    db.run(`INSERT INTO keys (key, hwid, ip, expires_at) VALUES (?, 'ADMIN_CREATED', '127.0.0.1', ?)`, [newKey, expiresAt], (err) => {
+        if (err) return res.json({ success: false, message: err.message });
+        res.json({ success: true, key: newKey, expires_at: expiresAt });
+    });
+});
+
+// Очистить базу данных
+app.post('/api/admin/clear-db', verifyAdmin, (req, res) => {
+    db.run(`DELETE FROM keys`, [], (err) => {
+        if (err) return res.json({ success: false, message: err.message });
+        db.run(`DELETE FROM tokens`, [], () => {
+            res.json({ success: true, message: 'Database cleared successfully!' });
+        });
+    });
+});
+
+// Удалить конкретный ключ
+app.post('/api/admin/delete-key', verifyAdmin, (req, res) => {
+    const { key } = req.body;
+    db.run(`DELETE FROM keys WHERE key = ?`, [key], (err) => {
+        if (err) return res.json({ success: false, message: err.message });
+        res.json({ success: true, message: 'Key deleted successfully!' });
+    });
+});
+
 // -------------------------------------------------------------
-// 4. АВТОМАТИЧЕСКАЯ ОЧИСТКА БАЗЫ ДАННЫХ (Раз в час)
+// АВТОМАТИЧЕСКАЯ ОЧИСТКА БАЗЫ ДАННЫХ
 // -------------------------------------------------------------
 setInterval(() => {
     const now = new Date().toISOString();
-    
-    // Удаляем ключи с истекшим сроком
-    db.run(`DELETE FROM keys WHERE expires_at < ?`, [now], function(err) {
-        if (err) {
-            console.error('Error cleaning expired keys:', err.message);
-        } else if (this.changes > 0) {
-            console.log(`Cleaned up ${this.changes} expired keys from database.`);
-        }
-    });
-    
-    // Удаляем одноразовые токены старше 1 часа
+    db.run(`DELETE FROM keys WHERE expires_at < ? AND hwid != 'ADMIN_CREATED'`, [now]);
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    db.run(`DELETE FROM tokens WHERE created_at < ?`, [oneHourAgo], function(err) {
-        if (err) {
-            console.error('Error cleaning old tokens:', err.message);
-        } else if (this.changes > 0) {
-            console.log(`Cleaned up ${this.changes} old tokens from database.`);
-        }
-    });
+    db.run(`DELETE FROM tokens WHERE created_at < ?`, [oneHourAgo]);
 }, 60 * 60 * 1000);
 
 const PORT = process.env.PORT || 3000;
