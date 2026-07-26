@@ -113,7 +113,8 @@ app.post('/api/generate-key', (req, res) => {
             const newKey = generateRandomKey();
             const activationDeadline = new Date(Date.now() + 1 * 60 * 60 * 1000).toISOString();
 
-            db.run(`INSERT INTO keys (key, hwid, ip, expires_at) VALUES (?, NULL, ?, ?)`, [newKey, clientIp, activationDeadline], (insertErr) => {
+            db.run(`INSERT INTO keys (key, hwid, ip, expires_at) VALUES (?, NULL, '127.0.0.1', ?)`, [newKey, expiresAt], (err) => {
+                
                 if (insertErr) {
                     return res.status(500).json({ success: false, message: 'Database save error' });
                 }
