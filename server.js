@@ -8,6 +8,7 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+// Убеждаемся, что Render правильно определяет IP-адреса за прокси
 app.set('trust proxy', true);
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -20,6 +21,7 @@ const db = new sqlite3.Database('./keys.db', (err) => {
     }
 });
 
+// Создаем таблицы для ключей и защитных токенов
 db.serialize(() => {
     db.run(`
         CREATE TABLE IF NOT EXISTS keys (
@@ -44,8 +46,8 @@ function generateRandomKey() {
 }
 
 const VALID_TICKET = 'strix_passed_2026';
-// 🔑 СЕКРЕТНЫЙ ПАРОЛЬ АДМИНИСТРАТОРА (Поменяй на свой!)
-const ADMIN_SECRET = '231987';
+// 🔑 СЕКРЕТНЫЙ ПАРОЛЬ АДМИНИСТРАТОРА
+const ADMIN_SECRET = 'super_secret_admin_pass_2026';
 
 // Middleware для проверки админ-пароля
 function verifyAdmin(req, res, next) {
@@ -80,7 +82,7 @@ app.post('/api/get-token', (req, res) => {
 });
 
 // -------------------------------------------------------------
-// 2. ГЕНЕРАЦИЯ КЛЮЧА
+// 2. ГЕНЕРАЦИЯ КЛЮЧА ОБЫЧНЫМ ПОЛЬЗОВАТЕЛЕМ
 // -------------------------------------------------------------
 app.post('/api/generate-key', (req, res) => {
     const clientIp = req.ip;
@@ -113,8 +115,7 @@ app.post('/api/generate-key', (req, res) => {
             const newKey = generateRandomKey();
             const activationDeadline = new Date(Date.now() + 1 * 60 * 60 * 1000).toISOString();
 
-            db.run(`INSERT INTO keys (key, hwid, ip, expires_at) VALUES (?, NULL, '127.0.0.1', ?)`, [newKey, expiresAt], (err) => {
-                
+            db.run(`INSERT INTO keys (key, hwid, ip, expires_at) VALUES (?, NULL, ?, ?)`, [newKey, clientIp, activationDeadline], (insertErr) => {
                 if (insertErr) {
                     return res.status(500).json({ success: false, message: 'Database save error' });
                 }
@@ -129,7 +130,7 @@ app.post('/api/generate-key', (req, res) => {
 });
 
 // -------------------------------------------------------------
-// 3. ПРОВЕРКА И АКТИВАЦИЯ КЛЮЧА
+// 3. ПРОВЕРКА И АКТИВАЦИЯ КЛЮЧА В ИГРЕ
 // -------------------------------------------------------------
 app.post('/api/verify-key', (req, res) => {
     const { key, hwid } = req.body;
@@ -150,28 +151,32 @@ app.post('/api/verify-key', (req, res) => {
             return res.json({ success: false, message: 'Key has expired!' });
         }
 
+        // Первая активация: привязываем HWID и отсчитываем 7 дней (если это не бессрочный ключ)
         if (!row.hwid) {
-            const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+            let newExpiresAt = row.expires_at;
+            // Если срок меньше 50 лет — ставим 7 дней от момента первого входа
+            if (new Date(row.expires_at).getFullYear() < 2070) {
+                newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+            }
 
-            db.run(`UPDATE keys SET hwid = ?, expires_at = ? WHERE key = ?`, [hwid, sevenDaysFromNow, key], (updateErr) => {
+            db.run(`UPDATE keys SET hwid = ?, expires_at = ? WHERE key = ?`, [hwid, newExpiresAt, key], (updateErr) => {
                 if (updateErr) {
                     return res.json({ success: false, message: 'HWID binding error' });
                 }
-                return res.json({ success: true, message: 'Key successfully activated and bound to your PC! 7 days granted.' });
+                return res.json({ success: true, message: 'Key successfully activated!' });
             });
         } else if (row.hwid === hwid) {
             return res.json({ success: true, message: 'Access granted!' });
         } else {
-            return res.json({ success: false, message: 'This key is bound to another device!' });
+            return res.json({ success: false, message: 'Key bound to another PC!' });
         }
     });
 });
 
 // =============================================================
-// 👑 АДМИНСКИЕ ЭНДПОИНТЫ (Защищены паролем)
+// 👑 АДМИНСКИЕ ЭНДПОИНТЫ
 // =============================================================
 
-// Получить список всех ключей
 app.get('/api/admin/keys', verifyAdmin, (req, res) => {
     db.all(`SELECT * FROM keys ORDER BY expires_at DESC`, [], (err, rows) => {
         if (err) return res.json({ success: false, message: err.message });
@@ -179,26 +184,24 @@ app.get('/api/admin/keys', verifyAdmin, (req, res) => {
     });
 });
 
-// Создать кастомный/бессрочный ключ
+// ИСПРАВЛЕНО: hwid ставится в NULL, чтобы ключ привязался к первому кто его введет
 app.post('/api/admin/create-key', verifyAdmin, (req, res) => {
-    const { days } = req.body; // дни (если -1 или null, то бессрочный)
+    const { days } = req.body;
     const newKey = generateRandomKey();
     
     let expiresAt;
-    if (!days || days === -1) {
-        // Бессрочный ключ (на 100 лет вперед)
+    if (!days || parseInt(days) === -1) {
         expiresAt = new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000).toISOString();
     } else {
         expiresAt = new Date(Date.now() + parseInt(days) * 24 * 60 * 60 * 1000).toISOString();
     }
 
-    db.run(`INSERT INTO keys (key, hwid, ip, expires_at) VALUES (?, 'ADMIN_CREATED', '127.0.0.1', ?)`, [newKey, expiresAt], (err) => {
+    db.run(`INSERT INTO keys (key, hwid, ip, expires_at) VALUES (?, NULL, 'ADMIN', ?)`, [newKey, expiresAt], (err) => {
         if (err) return res.json({ success: false, message: err.message });
         res.json({ success: true, key: newKey, expires_at: expiresAt });
     });
 });
 
-// Очистить базу данных
 app.post('/api/admin/clear-db', verifyAdmin, (req, res) => {
     db.run(`DELETE FROM keys`, [], (err) => {
         if (err) return res.json({ success: false, message: err.message });
@@ -208,7 +211,6 @@ app.post('/api/admin/clear-db', verifyAdmin, (req, res) => {
     });
 });
 
-// Удалить конкретный ключ
 app.post('/api/admin/delete-key', verifyAdmin, (req, res) => {
     const { key } = req.body;
     db.run(`DELETE FROM keys WHERE key = ?`, [key], (err) => {
@@ -222,7 +224,7 @@ app.post('/api/admin/delete-key', verifyAdmin, (req, res) => {
 // -------------------------------------------------------------
 setInterval(() => {
     const now = new Date().toISOString();
-    db.run(`DELETE FROM keys WHERE expires_at < ? AND hwid != 'ADMIN_CREATED'`, [now]);
+    db.run(`DELETE FROM keys WHERE expires_at < ?`, [now]);
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     db.run(`DELETE FROM tokens WHERE created_at < ?`, [oneHourAgo]);
 }, 60 * 60 * 1000);
